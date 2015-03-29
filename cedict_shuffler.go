@@ -15,6 +15,7 @@ import (
 
 func main() {
 	cedictFile, err := os.Open(os.Args[1])
+	defer cedictFile.Close()
 	check(err)
 	entry := makeCedictEntry(randomLine(cedictFile))
 	fmt.Printf(
@@ -78,8 +79,8 @@ func makeCedictEntry(entry string) Entry {
 		panic("Failed to parse CEDICT line: " + entry)
 	}
 	return Entry{
-		simplified:  parts[1],
-		traditional: parts[2],
+		traditional: parts[1],
+		simplified:  parts[2],
 		pinyin:      vsToUmlaut(parts[3]),
 		definition:  parts[4],
 	}
@@ -88,7 +89,7 @@ func makeCedictEntry(entry string) Entry {
 // Replace "v" with "\u00fc" and "V" with "\u00dc"
 func vsToUmlaut(pinyin string) string {
 	return strings.Replace(
-		strings.Replace(pinyin, "V", "\u00dc", -1), "v", "\u00fc", -1,
+		strings.Replace(pinyin, "V:", "U\u0308", -1), "v:", "u\u0308", -1,
 	)
 }
 
