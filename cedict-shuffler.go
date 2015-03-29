@@ -18,7 +18,8 @@ func main() {
 	check(err)
 	entry := makeCedictEntry(randomLine(cedictFile))
 	fmt.Printf(
-		"%s (%s): %s\n", entry.traditional, entry.prettyPinyin(), entry.definition,
+		"%s \x1b[35m(\x1b[0m%s\x1b[35m): %s\n", entry.traditional,
+		entry.prettyPinyin(), entry.definition,
 	)
 }
 
@@ -54,11 +55,14 @@ type Entry struct {
 // Convert entry's pinyin to tonemarks and apply ANSI colours
 func (e *Entry) prettyPinyin() string {
 	syllables := strings.Split(e.pinyin, " ")
-	marker := toneMarker()
+	mark := toneMarker()
+	colour := toneColourer()
 	var buffer bytes.Buffer
 	for i, syllable := range syllables {
 		tone, letters := toneAndLetters(syllable)
-		buffer.WriteString(marker(tone, letters))
+		marked := mark(tone, letters)
+		colouredAndMarked := colour(tone, marked)
+		buffer.WriteString(colouredAndMarked)
 		if i < len(syllables)-1 {
 			buffer.WriteString(" ")
 		}
@@ -109,6 +113,18 @@ func toneMarker() func(tone int, letters string) string {
 		return letters
 	}
 	return toneMarker
+}
+
+// Wrap given string in ANSI output colours for MDBG tone
+func toneColourer() func(tone int, syllable string) string {
+	colours := [5]string{"\x1b[31m", "\x1b[33m", "\x1b[32m", "\x1b[34m",
+		"\x1b[30m"}
+	end := "\x1b[0m"
+	toneColourer := func(tone int, syllable string) string {
+		checkTone(tone)
+		return fmt.Sprintf("%s%s%s", colours[tone-1], syllable, end)
+	}
+	return toneColourer
 }
 
 // Bail out if tone not in range 1-5
