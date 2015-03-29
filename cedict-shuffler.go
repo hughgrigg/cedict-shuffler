@@ -2,10 +2,13 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
+	"golang.org/x/text/unicode/norm"
 	"math/rand"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -15,7 +18,7 @@ func main() {
 	check(err)
 	entry := makeCedictEntry(randomLine(cedictFile))
 	fmt.Printf(
-		"%s (%s): %s\n", entry.traditional, entry.pinyin, entry.definition,
+		"%s (%s): %s\n", entry.traditional, entry.prettyPinyin(), entry.definition,
 	)
 }
 
@@ -48,6 +51,21 @@ type Entry struct {
 	definition  string
 }
 
+// Convert entry's pinyin to tonemarks and apply ANSI colours
+func (e *Entry) prettyPinyin() string {
+	syllables := strings.Split(e.pinyin, " ")
+	marker := toneMarker()
+	var buffer bytes.Buffer
+	for i, syllable := range syllables {
+		tone, letters := toneAndLetters(syllable)
+		buffer.WriteString(marker(tone, letters))
+		if i < len(syllables)-1 {
+			buffer.WriteString(" ")
+		}
+	}
+	return buffer.String()
+}
+
 // Make an Entry out of a CEDICT line string
 func makeCedictEntry(entry string) Entry {
 	entryPattern := regexp.MustCompile(`^(\p{Han}+)\s(\p{Han}+)\s\[(.+)\]\s\/(.+)\/$`)
@@ -58,7 +76,53 @@ func makeCedictEntry(entry string) Entry {
 	return Entry{
 		simplified:  parts[1],
 		traditional: parts[2],
-		pinyin:      parts[3],
+		pinyin:      vsToUmlaut(parts[3]),
 		definition:  parts[4],
 	}
+}
+
+// Replace "v" with "\u00fc" and "V" with "\u00dc"
+func vsToUmlaut(pinyin string) string {
+	return strings.Replace(
+		strings.Replace(pinyin, "V", "\u00dc", -1), "v", "\u00fc", -1,
+	)
+}
+
+// Get pinyin tonemarking closure
+func toneMarker() func(tone int, letters string) string {
+	toneMarks := [4]string{"\u0304", "\u0301", "\u030C", "\u0300"}
+	targets := [13]string{"A", "E", "I", "O", "U", "\u00dc", "iu", "a", "e", "i",
+		"o", "u", "\u00fc"}
+	toneMarker := func(tone int, letters string) string {
+		checkTone(tone)
+		if tone == 5 {
+			return letters
+		}
+		// Replace first found tonemark target vowel with tonemarked version
+		for i := 0; i < 13; i++ {
+			if strings.Index(letters, targets[i]) > -1 {
+				replaced := strings.Replace(letters, targets[i],
+					targets[i]+toneMarks[tone-1], 1)
+				return string(norm.NFC.Bytes([]byte(replaced)))
+			}
+		}
+		return letters
+	}
+	return toneMarker
+}
+
+// Bail out if tone not in range 1-5
+func checkTone(tone int) {
+	if tone < 1 || tone > 5 {
+		panic("Invalid tone: " + string(tone))
+	}
+}
+
+// Get the tone and plain letters of a pinyin syllable
+func toneAndLetters(syllable string) (int, string) {
+	tone, err := strconv.Atoi(syllable[len(syllable)-1 : len(syllable)])
+	check(err)
+	checkTone(tone)
+	letters := syllable[:len(syllable)-1]
+	return tone, letters
 }
